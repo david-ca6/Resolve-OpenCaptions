@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-import sys
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog
 
 
 # ------------------------- resolve api connection -------------------------
@@ -49,6 +48,14 @@ def srt2df(file_path):
 
     return df
 
+def format_timestamp(seconds_value):
+    total_milliseconds = int(round(float(seconds_value) * 1000))
+    hours, remainder = divmod(total_milliseconds, 3600000)
+    minutes, remainder = divmod(remainder, 60000)
+    seconds, milliseconds = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+
 def df2srt(df, file_path):
     with open(file_path, 'w', encoding='utf-8') as file:
         for row in df:
@@ -58,17 +65,8 @@ def df2srt(df, file_path):
             if nid == 0:
                 continue
             
-            start_time = timedelta(seconds=row['start'])
-            hours, remainder = divmod(start_time.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            milliseconds = start_time.microseconds // 1000
-            start_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
-
-            end_time = timedelta(seconds=row['end'])
-            hours, remainder = divmod(end_time.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            milliseconds = end_time.microseconds // 1000
-            end_time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+            start_time_str = format_timestamp(row['start'])
+            end_time_str = format_timestamp(row['end'])
 
             file.write(f"{nid}\n")
             file.write(f"{start_time_str} --> {end_time_str}\n")
@@ -113,6 +111,25 @@ def timelineText2df(timeline, marker):
                                     text_content = text_tool.GetInput("StyledText")
                                     df.append({'id': nid, 'start': start_time, 'end': end_time, 'text': text_content})
                                     nid += 1
+    return df
+
+def timelineSubtitle2df(timeline, marker):
+    df = []
+    if timeline:
+        track_count = timeline.GetTrackCount("subtitle")
+        fps = float(timeline.GetSetting('timelineFrameRate'))
+        for i in range(1, track_count + 1):
+            track = timeline.GetItemListInTrack("subtitle", i)
+            if track:
+                track_name = timeline.GetTrackName("subtitle", i)
+                if track_name == marker:
+                    nid = 1
+                    for item in track:
+                        start_time = item.GetStart() / fps
+                        end_time = item.GetEnd() / fps
+                        text_content = item.GetName() or ""
+                        df.append({'id': nid, 'start': start_time, 'end': end_time, 'text': text_content})
+                        nid += 1
     return df
 
 # ------------------------- srt file functions -------------------------
@@ -305,8 +322,18 @@ def list_available_templates(media_pool):
 def get_video_tracks():
     global timeline
     timeline = project.GetCurrentTimeline()
+    if not timeline:
+        return []
     track_count = timeline.GetTrackCount("video")
     return [timeline.GetTrackName("video", i) for i in range(1, track_count + 1)]
+
+def get_subtitle_tracks():
+    global timeline
+    timeline = project.GetCurrentTimeline()
+    if not timeline:
+        return []
+    track_count = timeline.GetTrackCount("subtitle")
+    return [timeline.GetTrackName("subtitle", i) for i in range(1, track_count + 1)]
 
 def get_available_templates():
     """Get list of available Text+ templates from Media Pool"""
@@ -338,12 +365,14 @@ def main():
     root.focus_force()
     root.title("OpenCaptions")
     root.geometry("720x540")
-    root.minsize(720, 540)
+    root.minsize(720, 620)
 
     status_var = tk.StringVar()
     remove_punctuation_var = tk.BooleanVar(value=True)
     text_transform_options = ["Keep Case", "Lowercase", "Uppercase", "Capitalize All Words"]
     text_transform_var = tk.StringVar(value=text_transform_options[0])
+    subtotext_remove_punctuation_var = tk.BooleanVar(value=True)
+    subtotext_text_transform_var = tk.StringVar(value=text_transform_options[0])
 
     style = ttk.Style(root)
     style.configure("Delete.TButton", foreground="red")
@@ -351,6 +380,16 @@ def main():
     templates = get_available_templates()
     track_entries = []
     add_button = None
+    export_track_var = tk.StringVar()
+    export_path_var = tk.StringVar()
+    export_combo = None
+    exportsub_track_var = tk.StringVar()
+    exportsub_path_var = tk.StringVar()
+    exportsub_combo = None
+    subtotext_track_var = tk.StringVar()
+    subtotext_template_var = tk.StringVar(value=templates[0] if templates else "")
+    subtotext_combo = None
+    subtotext_template_combo = None
 
     def select_srt_file(entry):
         if entry not in track_entries:
@@ -358,6 +397,16 @@ def main():
         path = filedialog.askopenfilename(title="Select SRT File", filetypes=[("SRT files", "*.srt"), ("All files", "*.*")])
         if path:
             entry["srt_var"].set(path)
+
+    def select_export_file():
+        path = filedialog.asksaveasfilename(title="Export SRT File", defaultextension=".srt", filetypes=[("SRT files", "*.srt"), ("All files", "*.*")])
+        if path:
+            export_path_var.set(path)
+
+    def select_exportsub_file():
+        path = filedialog.asksaveasfilename(title="Export SRT File", defaultextension=".srt", filetypes=[("SRT files", "*.srt"), ("All files", "*.*")])
+        if path:
+            exportsub_path_var.set(path)
 
     def remove_track_entry(entry):
         nonlocal add_button
@@ -424,6 +473,44 @@ def main():
                     entry["template_var"].set(templates[0])
             else:
                 entry["template_var"].set("")
+        if subtotext_template_combo is not None:
+            subtotext_template_combo["values"] = templates
+        if templates:
+            if subtotext_template_var.get() not in templates:
+                subtotext_template_var.set(templates[0])
+        else:
+            subtotext_template_var.set("")
+
+    def refresh_export_tracks():
+        nonlocal export_combo
+        tracks = get_video_tracks()
+        if export_combo is not None:
+            export_combo["values"] = tracks
+        if tracks:
+            if export_track_var.get() not in tracks:
+                export_track_var.set(tracks[0])
+            status_var.set(f"Found {len(tracks)} Text+ tracks.")
+        else:
+            export_track_var.set("")
+            status_var.set("No Text+ tracks available.")
+
+    def refresh_exportsub_tracks():
+        nonlocal exportsub_combo, subtotext_combo
+        tracks = get_subtitle_tracks()
+        if exportsub_combo is not None:
+            exportsub_combo["values"] = tracks
+        if subtotext_combo is not None:
+            subtotext_combo["values"] = tracks
+        if tracks:
+            if exportsub_track_var.get() not in tracks:
+                exportsub_track_var.set(tracks[0])
+            if subtotext_track_var.get() not in tracks:
+                subtotext_track_var.set(tracks[0])
+            status_var.set(f"Found {len(tracks)} subtitle tracks.")
+        else:
+            exportsub_track_var.set("")
+            subtotext_track_var.set("")
+            status_var.set("No subtitle tracks available.")
 
     def execute_callback():
         if not track_entries:
@@ -449,6 +536,80 @@ def main():
                 return
         status_var.set(f"Created {len(track_entries)} Text+ tracks.")
 
+    def export_callback():
+        if not export_track_var.get():
+            status_var.set("Select a Text+ track to export.")
+            return
+        if not export_path_var.get():
+            status_var.set("Select an SRT output file.")
+            return
+        global timeline
+        timeline = project.GetCurrentTimeline()
+        if not timeline:
+            status_var.set("No active timeline.")
+            return
+        df = timelineText2df(timeline, export_track_var.get())
+        if not df:
+            status_var.set("No Text+ clips found on selected track.")
+            return
+        try:
+            df2srt(df, export_path_var.get())
+            status_var.set("Exported Text+ track.")
+        except Exception as error:
+            status_var.set("Failed to export Text+ track.")
+            print(f"Error exporting Text+: {error}")
+
+    def export_sub_callback():
+        if not exportsub_track_var.get():
+            status_var.set("Select a subtitle track to export.")
+            return
+        if not exportsub_path_var.get():
+            status_var.set("Select an SRT output file.")
+            return
+        global timeline
+        timeline = project.GetCurrentTimeline()
+        if not timeline:
+            status_var.set("No active timeline.")
+            return
+        df = timelineSubtitle2df(timeline, exportsub_track_var.get())
+        if not df:
+            status_var.set("No subtitles found on selected track.")
+            return
+        try:
+            df2srt(df, exportsub_path_var.get())
+            status_var.set("Exported subtitle track.")
+        except Exception as error:
+            status_var.set("Failed to export subtitle track.")
+            print(f"Error exporting subtitle: {error}")
+
+    def subtotext_callback():
+        if not subtotext_track_var.get():
+            status_var.set("Select a subtitle track.")
+            return
+        if not subtotext_template_var.get():
+            status_var.set("Select a Text+ template.")
+            return
+        global timeline
+        timeline = project.GetCurrentTimeline()
+        if not timeline:
+            status_var.set("No active timeline.")
+            return
+        df = timelineSubtitle2df(timeline, subtotext_track_var.get())
+        if not df:
+            status_var.set("No subtitles found on selected track.")
+            return
+        success = df2NewtimelineText(
+            df,
+            timeline,
+            subtotext_template_var.get(),
+            remove_punctuation=subtotext_remove_punctuation_var.get(),
+            text_transform=subtotext_text_transform_var.get(),
+        )
+        if success:
+            status_var.set("Created Text+ track from subtitles.")
+        else:
+            status_var.set("Failed to create Text+ track from subtitles.")
+
     content = ttk.Frame(root, padding=24)
     content.grid(row=0, column=0, sticky="nsew")
     root.columnconfigure(0, weight=1)
@@ -457,14 +618,39 @@ def main():
     content.columnconfigure(0, weight=1)
     content.rowconfigure(0, weight=1)
 
-    tracks_section = ttk.LabelFrame(content, text="Tracks", padding=(16, 12))
+    notebook = ttk.Notebook(content)
+    notebook.grid(row=0, column=0, sticky="nsew")
+
+    create_tab = ttk.Frame(notebook)
+    create_tab.columnconfigure(0, weight=1)
+    notebook.add(create_tab, text="Create Text+")
+
+    export_tab = ttk.Frame(notebook)
+    export_tab.columnconfigure(0, weight=1)
+    notebook.add(export_tab, text="Export Text+")
+
+    subtotext_tab = ttk.Frame(notebook)
+    subtotext_tab.columnconfigure(0, weight=1)
+    notebook.add(subtotext_tab, text="Sub to Text+")
+
+    exportsub_tab = ttk.Frame(notebook)
+    exportsub_tab.columnconfigure(0, weight=1)
+    notebook.add(exportsub_tab, text="Export Sub")
+
+    tracks_section = ttk.LabelFrame(create_tab, text="Tracks", padding=(16, 12))
     tracks_section.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
     tracks_section.columnconfigure(1, weight=1)
     tracks_section.columnconfigure(2, weight=1)
     tracks_section.rowconfigure(0, weight=1)
 
-    tracks_frame = ttk.Frame(tracks_section)
-    tracks_frame.grid(row=0, column=0, columnspan=5, sticky="nsew")
+    tracks_container = ttk.Frame(tracks_section, height=220)
+    tracks_container.grid(row=0, column=0, columnspan=5, sticky="nsew")
+    tracks_container.columnconfigure(0, weight=1)
+    tracks_container.rowconfigure(0, weight=1)
+    tracks_container.grid_propagate(False)
+
+    tracks_frame = ttk.Frame(tracks_container)
+    tracks_frame.grid(row=0, column=0, sticky="nsew")
     tracks_frame.columnconfigure(1, weight=1)
     tracks_frame.columnconfigure(2, weight=1)
 
@@ -475,14 +661,16 @@ def main():
     ttk.Label(tracks_frame, text="Remove").grid(row=0, column=4, sticky="w")
 
     controls_frame = ttk.Frame(tracks_section)
-    controls_frame.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(12, 0))
+    controls_frame.grid(row=1, column=0, columnspan=5, sticky="sew", pady=(12, 0))
+    controls_frame.columnconfigure(0, weight=0)
+    controls_frame.columnconfigure(1, weight=0)
     controls_frame.columnconfigure(2, weight=1)
 
     add_button = ttk.Button(controls_frame, text="Add Track", command=add_track_entry)
-    add_button.grid(row=0, column=0, sticky="w")
-    ttk.Button(controls_frame, text="Refresh Templates", command=refresh_templates).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    add_button.grid(row=0, column=0, sticky="sw")
+    ttk.Button(controls_frame, text="Refresh Templates", command=refresh_templates).grid(row=0, column=1, sticky="sw", padx=(12, 0))
 
-    options_section = ttk.LabelFrame(content, text="Options", padding=(16, 12))
+    options_section = ttk.LabelFrame(create_tab, text="Options", padding=(16, 12))
     options_section.grid(row=1, column=0, sticky="ew")
     options_section.columnconfigure(1, weight=1)
 
@@ -491,18 +679,92 @@ def main():
     ttk.Label(options_section, text="Remove punctuation").grid(row=1, column=0, sticky="w", pady=(12, 0))
     ttk.Checkbutton(options_section, variable=remove_punctuation_var, onvalue=True, offvalue=False).grid(row=1, column=1, sticky="w", pady=(12, 0))
 
-    actions_frame = ttk.Frame(content)
+    actions_frame = ttk.Frame(create_tab)
     actions_frame.grid(row=2, column=0, sticky="ew", pady=(16, 0))
     ttk.Button(actions_frame, text="Execute", command=execute_callback).grid(row=0, column=0, sticky="ew")
     actions_frame.columnconfigure(0, weight=1)
 
+    subtotext_section = ttk.LabelFrame(subtotext_tab, text="Convert", padding=(16, 12))
+    subtotext_section.grid(row=0, column=0, sticky="nsew")
+    subtotext_section.columnconfigure(1, weight=1)
+
+    ttk.Label(subtotext_section, text="Subtitle Track").grid(row=0, column=0, sticky="w")
+    subtotext_combo = ttk.Combobox(subtotext_section, textvariable=subtotext_track_var, state="readonly")
+    subtotext_combo.grid(row=0, column=1, sticky="ew")
+    ttk.Button(subtotext_section, text="Refresh Tracks", command=refresh_exportsub_tracks).grid(row=0, column=2, sticky="w", padx=(12, 0))
+
+    ttk.Label(subtotext_section, text="Template").grid(row=1, column=0, sticky="w", pady=(12, 0))
+    subtotext_template_combo = ttk.Combobox(subtotext_section, textvariable=subtotext_template_var, values=templates, state="readonly")
+    subtotext_template_combo.grid(row=1, column=1, sticky="ew", pady=(12, 0))
+    ttk.Button(subtotext_section, text="Refresh Templates", command=refresh_templates).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
+
+    subtotext_options = ttk.LabelFrame(subtotext_tab, text="Options", padding=(16, 12))
+    subtotext_options.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+    subtotext_options.columnconfigure(1, weight=1)
+
+    ttk.Label(subtotext_options, text="Case").grid(row=0, column=0, sticky="w")
+    ttk.Combobox(subtotext_options, textvariable=subtotext_text_transform_var, values=text_transform_options, state="readonly").grid(row=0, column=1, sticky="ew")
+    ttk.Label(subtotext_options, text="Remove punctuation").grid(row=1, column=0, sticky="w", pady=(12, 0))
+    ttk.Checkbutton(subtotext_options, variable=subtotext_remove_punctuation_var, onvalue=True, offvalue=False).grid(row=1, column=1, sticky="w", pady=(12, 0))
+
+    subtotext_actions = ttk.Frame(subtotext_tab)
+    subtotext_actions.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+    ttk.Button(subtotext_actions, text="Convert", command=subtotext_callback).grid(row=0, column=0, sticky="ew")
+    subtotext_actions.columnconfigure(0, weight=1)
+
+    ttk.Label(
+        subtotext_tab,
+        text="This feature relies on a bug in the DaVinci Resolve API. If that bug gets fixed, all plugins that convert sub tracks to Text+ will break. Using a srt file is more reliable.",
+        wraplength=480,
+        foreground="orange"
+    ).grid(row=3, column=0, sticky="w", pady=(12, 0))
+
+    export_section = ttk.LabelFrame(export_tab, text="Export", padding=(16, 12))
+    export_section.grid(row=0, column=0, sticky="nsew")
+    export_section.columnconfigure(1, weight=1)
+
+    ttk.Label(export_section, text="Text+ Track").grid(row=0, column=0, sticky="w")
+    export_combo = ttk.Combobox(export_section, textvariable=export_track_var, state="readonly")
+    export_combo.grid(row=0, column=1, sticky="ew")
+    ttk.Button(export_section, text="Refresh Tracks", command=refresh_export_tracks).grid(row=0, column=2, sticky="w", padx=(12, 0))
+
+    ttk.Label(export_section, text="SRT File").grid(row=1, column=0, sticky="w", pady=(12, 0))
+    ttk.Entry(export_section, textvariable=export_path_var).grid(row=1, column=1, sticky="ew", pady=(12, 0))
+    ttk.Button(export_section, text="Select", command=select_export_file).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
+
+    ttk.Button(export_section, text="Export", command=export_callback).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(24, 0))
+
+    exportsub_section = ttk.LabelFrame(exportsub_tab, text="Export", padding=(16, 12))
+    exportsub_section.grid(row=0, column=0, sticky="nsew")
+    exportsub_section.columnconfigure(1, weight=1)
+
+    ttk.Label(exportsub_section, text="Subtitle Track").grid(row=0, column=0, sticky="w")
+    exportsub_combo = ttk.Combobox(exportsub_section, textvariable=exportsub_track_var, state="readonly")
+    exportsub_combo.grid(row=0, column=1, sticky="ew")
+    ttk.Button(exportsub_section, text="Refresh Tracks", command=refresh_exportsub_tracks).grid(row=0, column=2, sticky="w", padx=(12, 0))
+
+    ttk.Label(exportsub_section, text="SRT File").grid(row=1, column=0, sticky="w", pady=(12, 0))
+    ttk.Entry(exportsub_section, textvariable=exportsub_path_var).grid(row=1, column=1, sticky="ew", pady=(12, 0))
+    ttk.Button(exportsub_section, text="Select", command=select_exportsub_file).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
+
+    ttk.Button(exportsub_section, text="Export", command=export_sub_callback).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(24, 0))
+
+    ttk.Label(
+        exportsub_section,
+        text="This feature relies on a bug in the DaVinci Resolve API. If that bug gets fixed, all plugins that convert sub tracks to Text+ will break. Using a srt file is more reliable.",
+        wraplength=480,
+        foreground="orange"
+    ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(12, 0))
+
     status_frame = ttk.Frame(content)
-    status_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+    status_frame.grid(row=1, column=0, sticky="ew", pady=(12, 0))
     status_lbl = ttk.Label(status_frame, textvariable=status_var)
     status_lbl.grid(row=0, column=0, sticky="w")
 
     add_track_entry()
     refresh_templates()
+    refresh_export_tracks()
+    refresh_exportsub_tracks()
 
     root.mainloop()
 
