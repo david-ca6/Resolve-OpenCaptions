@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 
-version = "0.01.00"
+version = "0.01.01"
 
 # ------------------------- resolve api connection -------------------------
 
@@ -22,8 +22,12 @@ timeline = project.GetCurrentTimeline()
 def srt2df(file_path):
     df = []
 
-    with open(file_path, 'r', encoding='utf-8-sig') as file:
-        content = file.read()
+    try:
+        with open(file_path, 'r', encoding='utf-8-sig') as file:
+            content = file.read()
+    except UnicodeDecodeError:
+        with open(file_path, 'r', encoding='cp1252') as file:
+            content = file.read()
 
     subtitle_blocks = content.strip().split('\n\n')
 
@@ -57,7 +61,7 @@ def format_timestamp(seconds_value):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 def df2srt(df, file_path):
-    with open(file_path, 'w', encoding='utf-8-sig') as file:
+    with open(file_path, 'w', encoding='utf-8') as file:
         for row in df:
 
             nid = row['id']
