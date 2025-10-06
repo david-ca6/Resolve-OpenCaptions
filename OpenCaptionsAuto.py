@@ -3,7 +3,7 @@
 from typing import List, Dict, Any
 
 
-version = "0.01.01"
+version = "0.01.00"
 
 try:
     resolve # if we run inside Resolve, we already have the resolve object
@@ -16,7 +16,7 @@ project = project_manager.GetCurrentProject()
 timeline = project.GetCurrentTimeline()
 
 
-def remove_punctuation(text: str) -> str:
+def remove_punctuationText(text: str) -> str:
     punctuation = [".", ","]
     for mark in punctuation:
         text = text.replace(mark, "")
@@ -160,7 +160,7 @@ def df2NewtimelineText(df: List[Dict[str, Any]], current_timeline, template_name
                 if comp:
                     text_tool = comp.FindToolByID("TextPlus")
                     if text_tool:
-                        text_content = remove_punctuation(row["text"]) if remove_punctuation else row["text"]
+                        text_content = remove_punctuationText(row["text"]) if remove_punctuation else row["text"]
                         text_content = apply_text_transform(text_content, text_transform)
                         text_tool.SetInput("StyledText", text_content)
                         created_clips.append(timeline_item)

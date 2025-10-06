@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 
-version = "0.01.01"
+version = "0.01.00"
 
 # ------------------------- resolve api connection -------------------------
 
