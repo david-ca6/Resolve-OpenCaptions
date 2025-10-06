@@ -1,4 +1,4 @@
-# Davinci Resolve OpenCaptions
+# DaVinci Resolve OpenCaptions
 Free & Open-Source subtitle to Text+ tool for DaVinci Resolve. No subscriptions. No paywalls. Just captions that work.
 
 ![OpenCaptions](docs/images/ui.png)
@@ -48,8 +48,7 @@ This is an open source tool that uses the DaVinci API to create a Text+ caption 
 - Compatible with both DaVinci Resolve Free and DaVinci Resolve Studio (paid)
 
 ## OpenCaptionsAuto (experimental)
-OpenCaptionsAuto is a script that can be used as an alternative to OpenCaptions. It automatically converts subtitle tracks to Text+ tracks using templates. It is not a GUI tool, to use it you name the subtitle tracks the same as the Text+ templates you want to use. It will convert all subtitle tracks to Text+ tracks. 
-
+OpenCaptionsAuto is a script that can be used as an alternative to OpenCaptions. It automatically converts subtitle tracks to Text+ tracks using templates. It is not a GUI tool; to use it, you name the subtitle tracks the same as the Text+ templates you want to use. It will convert all subtitle tracks to Text+ tracks.
 ## Dependencies
 - Python 3.10+
 - tkinter (standard library)
@@ -66,4 +65,5 @@ The starting point of OpenCaptions is based on one of my older projects, [Resolv
 But TextPlus2SRT was more a custom script for my own use than anything else; it was missing a lot of features, it only worked with Linux, required typing in a terminal, and it only allowed converting SRT to TextPlus, nothing more. OpenCaptions is intended to be a stronger base to work from to make a more powerful and user-friendly tool.
 
 ## Disclaimer about experimental features
-> The OpenCaptionsAuto plugin, the subtitle to Text+ conversion, and the subtitle conversion rely on a bug in the DaVinci Resolve API that allow to read the subtitle text from the subtitle name filed. If that bug gets fixed, all plugins that convert sub tracks to Text+ will break. Using OpenCaptions with a srt file is more reliable.
+## Disclaimer about experimental features
+> The OpenCaptionsAuto plugin, the subtitle to Text+ conversion, and the subtitle export rely on a bug in the DaVinci Resolve API that allows reading the subtitle text from the subtitle name field. If that bug gets fixed, all plugins that convert subtitle tracks to Text+ will break. Using OpenCaptions with an SRT file is more reliable.

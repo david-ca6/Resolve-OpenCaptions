@@ -3,11 +3,12 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 
+version = "0.01.00"
 
 # ------------------------- resolve api connection -------------------------
 
 try:
-    resolve
+    resolve # if we run inside Resolve, we already have the resolve object
 except NameError:
     from python_get_resolve import GetResolve
     resolve = GetResolve()
@@ -21,7 +22,7 @@ timeline = project.GetCurrentTimeline()
 def srt2df(file_path):
     df = []
 
-    with open(file_path, 'r', encoding='utf-8') as file:
+    with open(file_path, 'r', encoding='utf-8-sig') as file:
         content = file.read()
 
     subtitle_blocks = content.strip().split('\n\n')
@@ -55,9 +56,8 @@ def format_timestamp(seconds_value):
     seconds, milliseconds = divmod(remainder, 1000)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
-
 def df2srt(df, file_path):
-    with open(file_path, 'w', encoding='utf-8') as file:
+    with open(file_path, 'w', encoding='utf-8-sig') as file:
         for row in df:
 
             nid = row['id']
@@ -72,10 +72,10 @@ def df2srt(df, file_path):
             file.write(f"{start_time_str} --> {end_time_str}\n")
             file.write(f"{row['text']}\n\n")
 
-def remove_ponctuation(text):
-    ponctuation = [".", ","]
-    for ponctuation in ponctuation:
-        text = text.replace(ponctuation, "")
+def remove_punctuationText(text: str) -> str:
+    punctuation = [".", ","]
+    for mark in punctuation:
+        text = text.replace(mark, "")
     return text
 
 def apply_text_transform(text, transform):
@@ -250,7 +250,7 @@ def df2NewtimelineText(df, timeline, template_name, remove_punctuation=True, tex
                 if comp:
                     text_tool = comp.FindToolByID("TextPlus")
                     if text_tool:
-                        text_content = remove_ponctuation(row['text']) if remove_punctuation else row['text']
+                        text_content = remove_punctuationText(row['text']) if remove_punctuation else row['text']
                         text_content = apply_text_transform(text_content, text_transform)
                         text_tool.SetInput("StyledText", text_content)
                         created_clips.append(timeline_item)
@@ -363,7 +363,7 @@ def get_available_templates():
 def main():
     root = tk.Tk()
     root.focus_force()
-    root.title("OpenCaptions")
+    root.title("OpenCaptions " + version)
     root.geometry("720x540")
     root.minsize(720, 620)
 
