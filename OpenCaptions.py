@@ -29,8 +29,8 @@ def readEncoding(file_path):
         except UnicodeDecodeError:
             continue
 
-    raise UnicodeDecodeError("Unable to decode file with any of the supported encodings")
-
+    raise UnicodeDecodeError('unknown', raw, 0, len(raw),
+                             "Unable to decode file with any of the supported encodings")
 
 def srt2df(file_path):
     df = []
@@ -84,7 +84,7 @@ def df2srt(df, file_path):
             file.write(f"{start_time_str} --> {end_time_str}\n")
             file.write(f"{row['text']}\n\n")
 
-def remove_punctuationText(text: str) -> str:
+def remove_punctuationText(text):
     punctuation = [".", ","]
     for mark in punctuation:
         text = text.replace(mark, "")
