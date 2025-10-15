@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from typing import List, Dict, Any
 
 
 version = "0.01.00"
@@ -16,14 +15,14 @@ project = project_manager.GetCurrentProject()
 timeline = project.GetCurrentTimeline()
 
 
-def remove_punctuationText(text: str) -> str:
+def remove_punctuationText(text):
     punctuation = [".", ","]
     for mark in punctuation:
         text = text.replace(mark, "")
     return text
 
 
-def apply_text_transform(text: str, transform: str) -> str:
+def apply_text_transform(text, transform):
     if transform == "Lowercase":
         return text.lower()
     if transform == "Uppercase":
@@ -33,8 +32,8 @@ def apply_text_transform(text: str, transform: str) -> str:
     return text
 
 
-def timelineSubtitle2df(current_timeline, marker: str) -> List[Dict[str, Any]]:
-    df: List[Dict[str, Any]] = []
+def timelineSubtitle2df(current_timeline, marker):
+    df = []
     if current_timeline:
         track_count = current_timeline.GetTrackCount("subtitle")
         fps = float(current_timeline.GetSetting("timelineFrameRate"))
@@ -53,7 +52,7 @@ def timelineSubtitle2df(current_timeline, marker: str) -> List[Dict[str, Any]]:
     return df
 
 
-def find_text_plus_template_by_name(media_pool, template_name: str):
+def find_text_plus_template_by_name(media_pool, template_name):
     root_folder = media_pool.GetRootFolder()
 
     def search_folder(folder):
@@ -74,9 +73,9 @@ def find_text_plus_template_by_name(media_pool, template_name: str):
 
 def list_available_templates(media_pool):
     root_folder = media_pool.GetRootFolder()
-    templates: List[str] = []
+    templates = []
 
-    def search_folder(folder, folder_path: str = ""):
+    def search_folder(folder, folder_path=""):
         clips = folder.GetClipList()
         for clip in clips:
             if clip.GetClipProperty("File Path") == "":
@@ -97,7 +96,7 @@ def list_available_templates(media_pool):
         print("No Text+ templates found in Media Pool.")
 
 
-def df2NewtimelineText(df: List[Dict[str, Any]], current_timeline, template_name: str, remove_punctuation: bool = True, text_transform: str = "Keep Case") -> bool:
+def df2NewtimelineText(df, current_timeline, template_name, remove_punctuation=True, text_transform="Keep Case"):
     if not current_timeline or not df:
         print(f"No timeline or empty subtitles for template {template_name}.")
         return False
@@ -134,7 +133,7 @@ def df2NewtimelineText(df: List[Dict[str, Any]], current_timeline, template_name
     except Exception as error:
         print(f"Warning: could not calculate duration multiplier for {template_name}: {error}")
         duration_multiplier = 1.0
-    created_clips: List[Any] = []
+    created_clips = []
     for row in df:
         if row["id"] == 0:
             continue
@@ -179,7 +178,7 @@ def df2NewtimelineText(df: List[Dict[str, Any]], current_timeline, template_name
     return bool(created_clips)
 
 
-def convert_subtitle_tracks(remove_punctuation: bool = True, text_transform: str = "Keep Case") -> int:
+def convert_subtitle_tracks(remove_punctuation=True, text_transform="Keep Case"):
     global timeline
     timeline = project.GetCurrentTimeline()
     if not timeline:
@@ -204,7 +203,7 @@ def convert_subtitle_tracks(remove_punctuation: bool = True, text_transform: str
     return success
 
 
-def main() -> None:
+def main():
     global project
     current_project = project_manager.GetCurrentProject()
     if not current_project:

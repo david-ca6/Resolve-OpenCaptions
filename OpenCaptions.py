@@ -19,15 +19,23 @@ timeline = project.GetCurrentTimeline()
 
 # ------------------------- srt file functions -------------------------
 
+def readEncoding(file_path):
+    with open(file_path, 'rb') as f:
+        raw = f.read()
+
+    for enc in ('utf-8-sig', 'utf-16', 'utf-32', 'cp1252'):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+
+    raise UnicodeDecodeError("Unable to decode file with any of the supported encodings")
+
+
 def srt2df(file_path):
     df = []
 
-    try:
-        with open(file_path, 'r', encoding='utf-8-sig') as file:
-            content = file.read()
-    except UnicodeDecodeError:
-        with open(file_path, 'r', encoding='cp1252') as file:
-            content = file.read()
+    content = readEncoding(file_path)
 
     subtitle_blocks = content.strip().split('\n\n')
 
