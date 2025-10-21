@@ -34,8 +34,8 @@ def readEncoding(file_path):
 def srt2df(file_path):
     df = []
 
-    content = content.replace('\r\n', '\n') # replace windows line endings with nix (unix/linux/macos) line endings
     content = readEncoding(file_path)
+    content = content.replace('\r\n', '\n') # replace windows line endings with nix (unix/linux/macos) line endings
 
     subtitle_blocks = content.strip().split('\n\n')
 
