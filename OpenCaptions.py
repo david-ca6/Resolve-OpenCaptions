@@ -29,12 +29,12 @@ def readEncoding(file_path):
         except UnicodeDecodeError:
             continue
 
-    raise UnicodeDecodeError('unknown', raw, 0, len(raw),
-                             "Unable to decode file with any of the supported encodings")
+    raise UnicodeDecodeError('unknown', raw, 0, len(raw), "Unable to decode file with any of the supported encodings")
 
 def srt2df(file_path):
     df = []
 
+    content = content.replace('\r\n', '\n') # replace windows line endings with nix (unix/linux/macos) line endings
     content = readEncoding(file_path)
 
     subtitle_blocks = content.strip().split('\n\n')
