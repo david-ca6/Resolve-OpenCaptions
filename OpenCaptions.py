@@ -403,20 +403,44 @@ def main():
     subtotext_combo = None
     subtotext_template_combo = None
 
+    def prompt_for_path(dialog_func, **kwargs):
+        try:
+            root.update_idletasks()
+            root.lift()
+            return dialog_func(parent=root, **kwargs)
+        except Exception as error:
+            status_var.set("Could not open file picker. Paste the path manually.")
+            print(f"File dialog error: {error}")
+            return ""
+
     def select_srt_file(entry):
         if entry not in track_entries:
             return
-        path = filedialog.askopenfilename(title="Select SRT File", filetypes=[("SRT files", "*.srt"), ("All files", "*.*")])
+        path = prompt_for_path(
+            filedialog.askopenfilename,
+            title="Select SRT File",
+            filetypes=[("SRT files", "*.srt"), ("All files", "*.*")],
+        )
         if path:
             entry["srt_var"].set(path)
 
     def select_export_file():
-        path = filedialog.asksaveasfilename(title="Export SRT File", defaultextension=".srt", filetypes=[("SRT files", "*.srt"), ("All files", "*.*")])
+        path = prompt_for_path(
+            filedialog.asksaveasfilename,
+            title="Export SRT File",
+            defaultextension=".srt",
+            filetypes=[("SRT files", "*.srt"), ("All files", "*.*")],
+        )
         if path:
             export_path_var.set(path)
 
     def select_exportsub_file():
-        path = filedialog.asksaveasfilename(title="Export SRT File", defaultextension=".srt", filetypes=[("SRT files", "*.srt"), ("All files", "*.*")])
+        path = prompt_for_path(
+            filedialog.asksaveasfilename,
+            title="Export SRT File",
+            defaultextension=".srt",
+            filetypes=[("SRT files", "*.srt"), ("All files", "*.*")],
+        )
         if path:
             exportsub_path_var.set(path)
 
