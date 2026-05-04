@@ -2,7 +2,7 @@
 
 
 
-version = "0.01.00"
+version = "0.01.01"
 
 try:
     resolve # if we run inside Resolve, we already have the resolve object
