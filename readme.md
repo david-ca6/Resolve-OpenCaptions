@@ -46,10 +46,9 @@ Simply name the subtitle track the same as the Text+ template you want to use, a
 OpenCaptions Studio is a GUI to help convert a subtitle track to a Text+ track using a Text+ template, it allow to fix the timing of the subtitle track as you go through the subtitles.
 The best options if you use Davinci Resolve Studio `subtitle from audio` feature that generate badly timed subtitle tracks.
 
-[![OpenCaptions Studio](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=YOUTUBE_VIDEO_ID_HERE)
+Demo video:
+[![OpenCaptions Studio](https://img.youtube.com/vi/lQh17YKiljU/0.jpg)](https://www.youtube.com/watch?v=lQh17YKiljU)
 
-
-![OpenCaptions Studio](docs/images/opencaptionsstudio_ui.png)
 
 ## Install
 1. Install [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve) 19 or higher.
