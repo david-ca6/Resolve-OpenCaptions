@@ -4,15 +4,16 @@ import re
 import tkinter as tk
 from tkinter import ttk
 
-version = "0.01.01"
+version = "0.01.02"
 TEMPLATES_FOLDER_NAME = "Captions Templates"
 
 # ------------------------- resolve api connection -------------------------
 
 try:
-    resolve # if we run inside Resolve, we already have the resolve object
+    resolve  # if we run inside Resolve, we already have the resolve object
 except NameError:
     from python_get_resolve import GetResolve
+
     resolve = GetResolve()
 
 project_manager = resolve.GetProjectManager()
@@ -21,11 +22,13 @@ timeline = project.GetCurrentTimeline() if project else None
 
 # ------------------------- text functions -------------------------
 
+
 def remove_punctuationText(text):
     punctuation = [".", ","]
     for mark in punctuation:
         text = text.replace(mark, "")
     return text
+
 
 def apply_text_transform(text, transform):
     if transform == "All Lowercase":
@@ -36,13 +39,16 @@ def apply_text_transform(text, transform):
         return text.title()
     return text
 
+
 def normalize_caption_text(text):
     text = " ".join((text or "").split())
     text = re.sub(r"\s+([.,!?;:])", r"\1", text)
     text = re.sub(r"([({\[])\s+", r"\1", text)
     return text
 
+
 # ------------------------- resolve timeline functions -------------------------
+
 
 def get_current_timeline():
     global project, timeline
@@ -50,8 +56,10 @@ def get_current_timeline():
     timeline = project.GetCurrentTimeline() if project else None
     return timeline
 
+
 def get_timeline_fps(current_timeline):
     return float(current_timeline.GetSetting("timelineFrameRate"))
+
 
 def timecode_to_frame(timecode, fps):
     timecode = str(timecode).replace(";", ":")
@@ -64,6 +72,7 @@ def timecode_to_frame(timecode, fps):
     frames = int(parts[3])
     return int(round(((hours * 3600) + (minutes * 60) + seconds) * fps + frames))
 
+
 def frame_to_timecode(frame, fps):
     frame = max(0, int(frame))
     fps_int = int(round(fps))
@@ -71,6 +80,7 @@ def frame_to_timecode(frame, fps):
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
+
 
 def get_timeline_start_frame(current_timeline, fps):
     try:
@@ -82,6 +92,7 @@ def get_timeline_start_frame(current_timeline, fps):
     except Exception:
         return 0
 
+
 def get_current_timeline_frame(current_timeline):
     fps = get_timeline_fps(current_timeline)
     current_frame = timecode_to_frame(current_timeline.GetCurrentTimecode(), fps)
@@ -89,6 +100,7 @@ def get_current_timeline_frame(current_timeline):
     if current_frame >= start_frame:
         return current_frame - start_frame
     return current_frame
+
 
 def get_video_tracks():
     current_timeline = get_current_timeline()
@@ -101,6 +113,7 @@ def get_video_tracks():
         tracks.append(f"V{index} - {track_name}")
     return tracks
 
+
 def get_subtitle_tracks():
     current_timeline = get_current_timeline()
     if not current_timeline:
@@ -108,9 +121,12 @@ def get_subtitle_tracks():
     track_count = current_timeline.GetTrackCount("subtitle")
     tracks = []
     for index in range(1, track_count + 1):
-        track_name = current_timeline.GetTrackName("subtitle", index) or f"Subtitle {index}"
+        track_name = (
+            current_timeline.GetTrackName("subtitle", index) or f"Subtitle {index}"
+        )
         tracks.append(f"S{index} - {track_name}")
     return tracks
+
 
 def get_track_index(track_label):
     if not track_label:
@@ -120,6 +136,7 @@ def get_track_index(track_label):
         return int(prefix[1:])
     except Exception:
         return None
+
 
 def find_templates_folder(media_pool):
     root_folder = media_pool.GetRootFolder()
@@ -135,8 +152,10 @@ def find_templates_folder(media_pool):
 
     return search_folder(root_folder)
 
+
 def is_text_plus_template(clip):
     return clip.GetClipProperty("File Path") == ""
+
 
 def get_available_templates():
     try:
@@ -156,14 +175,19 @@ def get_available_templates():
         print(f"Error getting templates: {error}")
         return []
 
+
 def find_text_plus_template_by_name(media_pool, template_name):
     templates_folder = find_templates_folder(media_pool)
     if not templates_folder:
         return None
     for clip in templates_folder.GetClipList():
-        if is_text_plus_template(clip) and clip.GetClipProperty("Clip Name") == template_name:
+        if (
+            is_text_plus_template(clip)
+            and clip.GetClipProperty("Clip Name") == template_name
+        ):
             return clip
     return None
+
 
 def list_available_templates(media_pool):
     templates_folder = find_templates_folder(media_pool)
@@ -182,6 +206,7 @@ def list_available_templates(media_pool):
     else:
         print(f"No Text+ templates found in {TEMPLATES_FOLDER_NAME}.")
 
+
 def get_subtitles_in_range(current_timeline, subtitle_track_index, in_frame, out_frame):
     items = current_timeline.GetItemListInTrack("subtitle", subtitle_track_index) or []
     subtitles = []
@@ -191,15 +216,29 @@ def get_subtitles_in_range(current_timeline, subtitle_track_index, in_frame, out
         if start_frame < out_frame and end_frame > in_frame:
             text_content = normalize_caption_text(item.GetName())
             if text_content:
-                subtitles.append({
-                    "start_frame": start_frame,
-                    "end_frame": end_frame,
-                    "text": text_content,
-                })
+                subtitles.append(
+                    {
+                        "start_frame": start_frame,
+                        "end_frame": end_frame,
+                        "text": text_content,
+                    }
+                )
     subtitles.sort(key=lambda row: row["start_frame"])
     return subtitles
 
-def get_template_duration_multiplier(media_pool, current_timeline, text_clip, video_track_index, record_frame):
+
+def get_subtitle_cut_points(current_timeline, subtitle_track_index):
+    items = current_timeline.GetItemListInTrack("subtitle", subtitle_track_index) or []
+    points = set()
+    for item in items:
+        points.add(int(item.GetStart()))
+        points.add(int(item.GetEnd()))
+    return sorted(points)
+
+
+def get_template_duration_multiplier(
+    media_pool, current_timeline, text_clip, video_track_index, record_frame
+):
     duration_multiplier = 1.0
     try:
         test_duration = 100
@@ -215,14 +254,68 @@ def get_template_duration_multiplier(media_pool, current_timeline, text_clip, vi
             test_item = test_items[0]
             test_duration_real = test_item.GetDuration()
             current_timeline.DeleteClips([test_item], False)
-            duration_multiplier = test_duration / test_duration_real if test_duration_real > 0 else 1.0
+            duration_multiplier = (
+                test_duration / test_duration_real if test_duration_real > 0 else 1.0
+            )
         print(f"Duration multiplier: {duration_multiplier:.3f}")
     except Exception as error:
         print(f"Warning: could not calculate duration multiplier: {error}")
         duration_multiplier = 1.0
     return duration_multiplier
 
-def create_text_plus_clip(current_timeline, template_name, video_track_index, start_frame, end_frame, text_content):
+
+def append_text_plus_with_duration(
+    media_pool,
+    current_timeline,
+    text_clip,
+    track_index,
+    record_frame,
+    target_duration,
+    duration_multiplier,
+):
+    """
+    Append a Text+ clip and make sure it occupies exactly target_duration
+    timeline frames.
+
+    On fractional frame rates (23.976/29.97/59.94) Resolve can place the
+    clip one frame shorter than requested, leaving flickering 1-frame gaps
+    between captions, so the placed length is verified and corrected.
+    """
+    source_duration = max(1, int(target_duration * duration_multiplier + 0.999))
+    attempts = 4
+    for attempt in range(attempts):
+        new_clip = {
+            "mediaPoolItem": text_clip,
+            "startFrame": 0,
+            "endFrame": source_duration - 1,
+            "trackIndex": track_index,
+            "recordFrame": record_frame,
+        }
+        timeline_items = media_pool.AppendToTimeline([new_clip])
+        if not timeline_items or len(timeline_items) == 0:
+            return None
+        timeline_item = timeline_items[0]
+        adjustment = target_duration - int(timeline_item.GetDuration())
+        adjusted_source_duration = max(1, source_duration + adjustment)
+        if (
+            adjustment == 0
+            or adjusted_source_duration == source_duration
+            or attempt == attempts - 1
+        ):
+            return timeline_item
+        current_timeline.DeleteClips([timeline_item], False)
+        source_duration = adjusted_source_duration
+    return None
+
+
+def create_text_plus_clip(
+    current_timeline,
+    template_name,
+    video_track_index,
+    start_frame,
+    end_frame,
+    text_content,
+):
     if not current_timeline:
         print("No active timeline.")
         return False
@@ -243,19 +336,18 @@ def create_text_plus_clip(current_timeline, template_name, video_track_index, st
         video_track_index,
         max(0, int(start_frame)),
     )
-    new_duration = max(1, int(duration * duration_multiplier + 0.999))
-    new_clip = {
-        "mediaPoolItem": text_clip,
-        "startFrame": 0,
-        "endFrame": new_duration - 1,
-        "trackIndex": video_track_index,
-        "recordFrame": int(start_frame),
-    }
-    timeline_items = media_pool.AppendToTimeline([new_clip])
-    if not timeline_items or len(timeline_items) == 0:
+    timeline_item = append_text_plus_with_duration(
+        media_pool,
+        current_timeline,
+        text_clip,
+        video_track_index,
+        int(start_frame),
+        duration,
+        duration_multiplier,
+    )
+    if not timeline_item:
         print("Error: failed to create Text+ clip.")
         return False
-    timeline_item = timeline_items[0]
     timeline_item.SetClipColor("Green")
     if timeline_item.GetFusionCompCount() == 0:
         print("Warning: created clip has no Fusion composition.")
@@ -271,7 +363,17 @@ def create_text_plus_clip(current_timeline, template_name, video_track_index, st
     text_tool.SetInput("StyledText", text_content)
     return True
 
-def get_studio_range_payload(current_timeline, template_name, subtitle_track_index, video_track_index, in_frame, out_frame, remove_punctuation=True, text_transform="Keep"):
+
+def get_studio_range_payload(
+    current_timeline,
+    template_name,
+    subtitle_track_index,
+    video_track_index,
+    in_frame,
+    out_frame,
+    remove_punctuation=True,
+    text_transform="Keep",
+):
     if not current_timeline:
         print("No active timeline.")
         return None
@@ -290,7 +392,9 @@ def get_studio_range_payload(current_timeline, template_name, subtitle_track_ind
     if out_frame <= in_frame:
         print("OUT must be after IN.")
         return None
-    subtitles = get_subtitles_in_range(current_timeline, subtitle_track_index, in_frame, out_frame)
+    subtitles = get_subtitles_in_range(
+        current_timeline, subtitle_track_index, in_frame, out_frame
+    )
     if not subtitles:
         print("No subtitles found in selected range.")
         return None
@@ -305,7 +409,10 @@ def get_studio_range_payload(current_timeline, template_name, subtitle_track_ind
         "text": merged_text,
     }
 
-def process_studio_payload(current_timeline, template_name, video_track_index, payload, text_content=None):
+
+def process_studio_payload(
+    current_timeline, template_name, video_track_index, payload, text_content=None
+):
     if not payload:
         return 0
     if text_content is None:
@@ -324,11 +431,23 @@ def process_studio_payload(current_timeline, template_name, video_track_index, p
         text_content,
     )
     if success:
-        print(f"Created merged Text+ clip from {payload['count']} subtitle item(s): {text_content}")
+        print(
+            f"Created merged Text+ clip from {payload['count']} subtitle item(s): {text_content}"
+        )
         return payload["count"]
     return 0
 
-def process_studio_range(current_timeline, template_name, subtitle_track_index, video_track_index, in_frame, out_frame, remove_punctuation=True, text_transform="Keep"):
+
+def process_studio_range(
+    current_timeline,
+    template_name,
+    subtitle_track_index,
+    video_track_index,
+    in_frame,
+    out_frame,
+    remove_punctuation=True,
+    text_transform="Keep",
+):
     payload = get_studio_range_payload(
         current_timeline,
         template_name,
@@ -341,9 +460,13 @@ def process_studio_range(current_timeline, template_name, subtitle_track_index, 
     )
     if not payload:
         return 0
-    return process_studio_payload(current_timeline, template_name, video_track_index, payload)
+    return process_studio_payload(
+        current_timeline, template_name, video_track_index, payload
+    )
+
 
 # ------------------------- ui -------------------------
+
 
 def main():
     current_project = project_manager.GetCurrentProject()
@@ -352,12 +475,18 @@ def main():
         return
 
     selected_settings = {}
-    text_transform_options = ["Keep", "Uppercase Words", "All Uppercase", "All Lowercase"]
+    text_transform_options = [
+        "Keep",
+        "Uppercase Words",
+        "All Uppercase",
+        "All Lowercase",
+    ]
 
     setup_root = tk.Tk()
     setup_root.focus_force()
     setup_root.attributes("-topmost", True)
-    setup_root.title("OpenCaptions Studio Setup " + version)
+    setup_base_window_title = "OpenCaptions Studio Setup " + version
+    setup_root.title(setup_base_window_title)
     setup_root.geometry("640x400")
     setup_root.minsize(640, 380)
 
@@ -374,6 +503,15 @@ def main():
     template_var.set(templates[0] if templates else "")
     source_track_var.set(subtitle_tracks[0] if subtitle_tracks else "")
     destination_track_var.set(video_tracks[0] if video_tracks else "")
+
+    def format_setup_window_title(*_):
+        if template_var.get():
+            setup_root.title(f"{setup_base_window_title} - {template_var.get()}")
+        else:
+            setup_root.title(setup_base_window_title)
+
+    template_var.trace_add("write", format_setup_window_title)
+    format_setup_window_title()
 
     def set_setup_status(message):
         setup_status_var.set(message)
@@ -399,16 +537,20 @@ def main():
             destination_track_var.set(video_tracks[0])
         elif not video_tracks:
             destination_track_var.set("")
-        set_setup_status(f"Found {len(templates)} template(s), {len(subtitle_tracks)} subtitle track(s), {len(video_tracks)} video track(s).")
+        set_setup_status(
+            f"Found {len(templates)} template(s), {len(subtitle_tracks)} subtitle track(s), {len(video_tracks)} video track(s)."
+        )
 
     def start_studio():
-        selected_settings.update({
-            "template_name": template_var.get(),
-            "subtitle_track_index": get_track_index(source_track_var.get()),
-            "video_track_index": get_track_index(destination_track_var.get()),
-            "remove_punctuation": remove_punctuation_var.get(),
-            "text_transform": text_transform_var.get(),
-        })
+        selected_settings.update(
+            {
+                "template_name": template_var.get(),
+                "subtitle_track_index": get_track_index(source_track_var.get()),
+                "video_track_index": get_track_index(destination_track_var.get()),
+                "remove_punctuation": remove_punctuation_var.get(),
+                "text_transform": text_transform_var.get(),
+            }
+        )
         setup_root.destroy()
 
     setup_content = ttk.Frame(setup_root, padding=24)
@@ -422,35 +564,68 @@ def main():
     setup_section.columnconfigure(1, weight=1)
 
     ttk.Label(setup_section, text="Template").grid(row=0, column=0, sticky="w")
-    template_combo = ttk.Combobox(setup_section, textvariable=template_var, values=templates, state="readonly")
+    template_combo = ttk.Combobox(
+        setup_section, textvariable=template_var, values=templates, state="readonly"
+    )
     template_combo.grid(row=0, column=1, sticky="ew", padx=(12, 0))
 
-    ttk.Label(setup_section, text="Source Sub Track").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    source_track_combo = ttk.Combobox(setup_section, textvariable=source_track_var, values=subtitle_tracks, state="readonly")
+    ttk.Label(setup_section, text="Source Sub Track").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    source_track_combo = ttk.Combobox(
+        setup_section,
+        textvariable=source_track_var,
+        values=subtitle_tracks,
+        state="readonly",
+    )
     source_track_combo.grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=(12, 0))
 
-    ttk.Label(setup_section, text="Destination Video Track").grid(row=2, column=0, sticky="w", pady=(12, 0))
-    destination_track_combo = ttk.Combobox(setup_section, textvariable=destination_track_var, values=video_tracks, state="readonly")
-    destination_track_combo.grid(row=2, column=1, sticky="ew", padx=(12, 0), pady=(12, 0))
+    ttk.Label(setup_section, text="Destination Video Track").grid(
+        row=2, column=0, sticky="w", pady=(12, 0)
+    )
+    destination_track_combo = ttk.Combobox(
+        setup_section,
+        textvariable=destination_track_var,
+        values=video_tracks,
+        state="readonly",
+    )
+    destination_track_combo.grid(
+        row=2, column=1, sticky="ew", padx=(12, 0), pady=(12, 0)
+    )
 
-    ttk.Button(setup_section, text="Refresh", command=refresh_all).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(16, 0))
+    ttk.Button(setup_section, text="Refresh", command=refresh_all).grid(
+        row=3, column=0, columnspan=2, sticky="ew", pady=(16, 0)
+    )
 
     options_section = ttk.LabelFrame(setup_content, text="Options", padding=(16, 12))
     options_section.grid(row=1, column=0, sticky="ew", pady=(12, 0))
     options_section.columnconfigure(1, weight=1)
 
     ttk.Label(options_section, text="Capitalization").grid(row=0, column=0, sticky="w")
-    ttk.Combobox(options_section, textvariable=text_transform_var, values=text_transform_options, state="readonly").grid(row=0, column=1, sticky="ew", padx=(12, 0))
+    ttk.Combobox(
+        options_section,
+        textvariable=text_transform_var,
+        values=text_transform_options,
+        state="readonly",
+    ).grid(row=0, column=1, sticky="ew", padx=(12, 0))
 
-    ttk.Label(options_section, text="Remove punctuation").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    ttk.Checkbutton(options_section, variable=remove_punctuation_var, onvalue=True, offvalue=False).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(12, 0))
+    ttk.Label(options_section, text="Remove punctuation").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    ttk.Checkbutton(
+        options_section, variable=remove_punctuation_var, onvalue=True, offvalue=False
+    ).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(12, 0))
 
     setup_actions = ttk.Frame(setup_content)
     setup_actions.grid(row=2, column=0, sticky="ew", pady=(16, 0))
     setup_actions.columnconfigure(0, weight=1)
     setup_actions.columnconfigure(1, weight=1)
-    ttk.Button(setup_actions, text="Start", command=start_studio).grid(row=0, column=0, sticky="ew")
-    ttk.Label(setup_actions, textvariable=setup_status_var).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ttk.Button(setup_actions, text="Start", command=start_studio).grid(
+        row=0, column=0, sticky="ew"
+    )
+    ttk.Label(setup_actions, textvariable=setup_status_var).grid(
+        row=0, column=1, sticky="w", padx=(12, 0)
+    )
 
     refresh_all()
     setup_root.mainloop()
@@ -461,7 +636,12 @@ def main():
     studio_root = tk.Tk()
     studio_root.focus_force()
     studio_root.attributes("-topmost", True)
-    studio_root.title("OpenCaptions Studio " + version)
+    studio_base_window_title = "OpenCaptions Studio " + version
+    studio_template_name = selected_settings.get("template_name", "")
+    if studio_template_name:
+        studio_root.title(f"{studio_base_window_title} - {studio_template_name}")
+    else:
+        studio_root.title(studio_base_window_title)
     studio_root.geometry("400x125")
     studio_root.minsize(400, 125)
 
@@ -524,7 +704,9 @@ def main():
             in_label_var.set(frame_to_timecode(previous_out_frame, fps))
             out_frame_var.set(-1)
             out_label_var.set("Not set")
-            set_status(f"Created merged Text+ clip from {count} subtitle item(s). OUT moved to IN.")
+            set_status(
+                f"Created merged Text+ clip from {count} subtitle item(s). OUT moved to IN."
+            )
         else:
             set_status("No Text+ clip created.")
 
@@ -574,7 +756,9 @@ def main():
         text_box.insert("1.0", payload["text"])
         text_box.focus_set()
         text_box.mark_set("insert", "end-1c")
-        set_status(f"Loaded text from {payload['count']} subtitle item(s). Press Enter to create Text+.")
+        set_status(
+            f"Loaded text from {payload['count']} subtitle item(s). Press Enter to create Text+."
+        )
 
     studio_content = ttk.Frame(studio_root, padding=24)
     studio_content.grid(row=0, column=0, sticky="nsew")
@@ -588,9 +772,13 @@ def main():
     time_frame.columnconfigure(3, weight=1)
 
     ttk.Label(time_frame, text="IN").grid(row=0, column=0, sticky="w")
-    ttk.Label(time_frame, textvariable=in_label_var).grid(row=0, column=1, sticky="w", padx=(8, 24))
+    ttk.Label(time_frame, textvariable=in_label_var).grid(
+        row=0, column=1, sticky="w", padx=(8, 24)
+    )
     ttk.Label(time_frame, text="OUT").grid(row=0, column=2, sticky="w")
-    ttk.Label(time_frame, textvariable=out_label_var).grid(row=0, column=3, sticky="w", padx=(8, 0))
+    ttk.Label(time_frame, textvariable=out_label_var).grid(
+        row=0, column=3, sticky="w", padx=(8, 0)
+    )
 
     text_box = tk.Text(studio_content, height=1, wrap="none", undo=True)
     text_box.bind("<Return>", process_text_box_return)
@@ -601,11 +789,40 @@ def main():
     actions_frame.columnconfigure(0, weight=1)
     actions_frame.columnconfigure(1, weight=1)
     actions_frame.columnconfigure(2, weight=1)
-    ttk.Button(actions_frame, text="IN", command=mark_in).grid(row=0, column=0, sticky="ew")
-    ttk.Button(actions_frame, text="OUT", command=mark_out).grid(row=0, column=1, sticky="ew", padx=(12, 0))
-    ttk.Button(actions_frame, text="Process", command=load_process_text).grid(row=0, column=2, sticky="ew", padx=(12, 0))
+    ttk.Button(actions_frame, text="IN", command=mark_in).grid(
+        row=0, column=0, sticky="ew"
+    )
+    ttk.Button(actions_frame, text="OUT", command=load_process_text).grid(
+        row=0, column=1, sticky="ew", padx=(12, 0)
+    )
+    ttk.Button(actions_frame, text="Process", command=process_callback).grid(
+        row=0, column=2, sticky="ew", padx=(12, 0)
+    )
+
+    def on_studio_key(event):
+        if out_frame_var.get() >= 0:
+            return
+        current_timeline = get_current_timeline()
+        if not current_timeline:
+            return
+        if event.keysym in ("Left", "Right"):
+            fps = get_timeline_fps(current_timeline)
+            current_frame = get_current_timeline_frame(current_timeline)
+            offset = -1 if event.keysym == "Left" else 1
+            new_frame = max(0, current_frame + offset)
+            timecode = frame_to_timecode(new_frame, fps)
+            current_timeline.SetCurrentTimecode(timecode)
+            return "break"
+        elif event.keysym == "space":
+            mark_out()
+            return "break"
+
+    studio_root.bind("<Left>", on_studio_key)
+    studio_root.bind("<Right>", on_studio_key)
+    studio_root.bind("<space>", on_studio_key)
 
     studio_root.mainloop()
+
 
 if __name__ == "__main__":
     main()

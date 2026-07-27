@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-
-
-version = "0.01.01"
+version = "0.01.02"
+TEMPLATES_FOLDER_NAME = "Captions Templates"
 
 try:
     resolve # if we run inside Resolve, we already have the resolve object
@@ -32,6 +31,25 @@ def apply_text_transform(text, transform):
     return text
 
 
+def find_templates_folder(media_pool):
+    root_folder = media_pool.GetRootFolder()
+
+    def search_folder(folder):
+        if folder.GetName() == TEMPLATES_FOLDER_NAME:
+            return folder
+        for subfolder in folder.GetSubFolderList():
+            result = search_folder(subfolder)
+            if result:
+                return result
+        return None
+
+    return search_folder(root_folder)
+
+
+def is_text_plus_template(clip):
+    return clip.GetClipProperty("File Path") == ""
+
+
 def timelineSubtitle2df(current_timeline, marker):
     df = []
     if current_timeline:
@@ -53,47 +71,79 @@ def timelineSubtitle2df(current_timeline, marker):
 
 
 def find_text_plus_template_by_name(media_pool, template_name):
-    root_folder = media_pool.GetRootFolder()
-
-    def search_folder(folder):
-        clips = folder.GetClipList()
-        for clip in clips:
-            if clip.GetClipProperty("File Path") == "":
-                clip_name = clip.GetClipProperty("Clip Name")
-                if clip_name == template_name:
-                    return clip
-        for subfolder in folder.GetSubFolderList():
-            result = search_folder(subfolder)
-            if result:
-                return result
+    templates_folder = find_templates_folder(media_pool)
+    if not templates_folder:
         return None
-
-    return search_folder(root_folder)
+    for clip in templates_folder.GetClipList():
+        if is_text_plus_template(clip) and clip.GetClipProperty("Clip Name") == template_name:
+            return clip
+    return None
 
 
 def list_available_templates(media_pool):
-    root_folder = media_pool.GetRootFolder()
+    templates_folder = find_templates_folder(media_pool)
+    if not templates_folder:
+        print(f"No {TEMPLATES_FOLDER_NAME} folder found in Media Pool.")
+        return
     templates = []
-
-    def search_folder(folder, folder_path=""):
-        clips = folder.GetClipList()
-        for clip in clips:
-            if clip.GetClipProperty("File Path") == "":
-                clip_name = clip.GetClipProperty("Clip Name")
-                location = folder_path or "Root"
-                templates.append(f"{clip_name} ({location})")
-        for subfolder in folder.GetSubFolderList():
-            subfolder_name = subfolder.GetName()
-            new_path = f"{folder_path}/{subfolder_name}" if folder_path else subfolder_name
-            search_folder(subfolder, new_path)
-
-    search_folder(root_folder)
+    for clip in templates_folder.GetClipList():
+        if is_text_plus_template(clip):
+            clip_name = clip.GetClipProperty("Clip Name")
+            templates.append(f"{clip_name} ({TEMPLATES_FOLDER_NAME})")
     if templates:
         print("Available Text+ templates:")
         for template in templates:
             print(f"  {template}")
     else:
-        print("No Text+ templates found in Media Pool.")
+        print(f"No Text+ templates found in {TEMPLATES_FOLDER_NAME}.")
+
+
+def append_text_plus_with_duration(media_pool, current_timeline, text_clip, track_index, record_frame, target_duration, duration_multiplier):
+    """
+    Append a Text+ clip and make sure it occupies exactly target_duration
+    timeline frames.
+
+    On fractional frame rates (23.976/29.97/59.94) Resolve can place the
+    clip one frame shorter than requested, leaving flickering 1-frame gaps
+    between captions, so the placed length is verified and corrected.
+    """
+    source_duration = max(1, int(target_duration * duration_multiplier + 0.999))
+    attempts = 4
+    for attempt in range(attempts):
+        new_clip = {
+            "mediaPoolItem": text_clip,
+            "startFrame": 0,
+            "endFrame": source_duration - 1,
+            "trackIndex": track_index,
+            "recordFrame": record_frame,
+        }
+        timeline_items = media_pool.AppendToTimeline([new_clip])
+        if not timeline_items or len(timeline_items) == 0:
+            return None
+        timeline_item = timeline_items[0]
+        adjustment = target_duration - int(timeline_item.GetDuration())
+        adjusted_source_duration = max(1, source_duration + adjustment)
+        if adjustment == 0 or adjusted_source_duration == source_duration or attempt == attempts - 1:
+            return timeline_item
+        current_timeline.DeleteClips([timeline_item], False)
+        source_duration = adjusted_source_duration
+    return None
+
+
+def snap_caption_frame_ranges(df, fps):
+    """
+    Convert caption times to frame ranges, closing the 1-frame gaps that
+    rounding fractional frame rates can leave between consecutive captions.
+    """
+    frame_ranges = []
+    for row in df:
+        start_frame = int(round(row["start"] * fps))
+        end_frame = int(round(row["end"] * fps))
+        frame_ranges.append([start_frame, end_frame])
+    for current_range, next_range in zip(frame_ranges, frame_ranges[1:]):
+        if 0 < next_range[0] - current_range[1] <= 1:
+            current_range[1] = next_range[0]
+    return frame_ranges
 
 
 def df2NewtimelineText(df, current_timeline, template_name, remove_punctuation=True, text_transform="Keep Case"):
@@ -134,25 +184,20 @@ def df2NewtimelineText(df, current_timeline, template_name, remove_punctuation=T
         print(f"Warning: could not calculate duration multiplier for {template_name}: {error}")
         duration_multiplier = 1.0
     created_clips = []
-    for row in df:
-        if row["id"] == 0:
-            continue
-        start_frame = int(row["start"] * fps)
-        end_frame = int(row["end"] * fps)
-        duration = end_frame - start_frame
-        new_clip = {
-            "mediaPoolItem": text_clip,
-            "startFrame": 0,
-            "endFrame": duration - 1,
-            "trackIndex": track_count,
-            "recordFrame": start_frame,
-        }
-        base_duration = new_clip["endFrame"] - new_clip["startFrame"] + 1
-        new_duration = int(base_duration * duration_multiplier + 0.999)
-        new_clip["endFrame"] = new_duration - 1
-        timeline_items = media_pool.AppendToTimeline([new_clip])
-        if timeline_items and len(timeline_items) > 0:
-            timeline_item = timeline_items[0]
+    rows = [row for row in df if row["id"] != 0]
+    frame_ranges = snap_caption_frame_ranges(rows, fps)
+    for row, (start_frame, end_frame) in zip(rows, frame_ranges):
+        duration = max(1, end_frame - start_frame)
+        timeline_item = append_text_plus_with_duration(
+            media_pool,
+            current_timeline,
+            text_clip,
+            track_count,
+            start_frame,
+            duration,
+            duration_multiplier,
+        )
+        if timeline_item:
             timeline_item.SetClipColor("Green")
             if timeline_item.GetFusionCompCount() > 0:
                 comp = timeline_item.GetFusionCompByIndex(1)

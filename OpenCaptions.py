@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import filedialog, ttk
 
-version = "0.01.01"
+version = "0.01.02"
+TEMPLATES_FOLDER_NAME = "Captions Templates"
 
 # ------------------------- resolve api connection -------------------------
 
 try:
-    resolve # if we run inside Resolve, we already have the resolve object
+    resolve  # if we run inside Resolve, we already have the resolve object
 except NameError:
     from python_get_resolve import GetResolve
+
     resolve = GetResolve()
 
 project_manager = resolve.GetProjectManager()
@@ -19,47 +21,67 @@ timeline = project.GetCurrentTimeline()
 
 # ------------------------- srt file functions -------------------------
 
+
 def readEncoding(file_path):
-    with open(file_path, 'rb') as f:
+    with open(file_path, "rb") as f:
         raw = f.read()
 
-    for enc in ('utf-8-sig', 'utf-16', 'utf-32', 'cp1252'):
+    for enc in ("utf-8-sig", "utf-16", "utf-32", "cp1252"):
         try:
             return raw.decode(enc)
         except UnicodeDecodeError:
             continue
 
-    raise UnicodeDecodeError('unknown', raw, 0, len(raw), "Unable to decode file with any of the supported encodings")
+    raise UnicodeDecodeError(
+        "unknown",
+        raw,
+        0,
+        len(raw),
+        "Unable to decode file with any of the supported encodings",
+    )
+
 
 def srt2df(file_path):
     df = []
 
     content = readEncoding(file_path)
-    content = content.replace('\r\n', '\n') # replace windows line endings with nix (unix/linux/macos) line endings
+    content = content.replace(
+        "\r\n", "\n"
+    )  # replace windows line endings with nix (unix/linux/macos) line endings
 
-    subtitle_blocks = content.strip().split('\n\n')
+    subtitle_blocks = content.strip().split("\n\n")
 
     for block in subtitle_blocks:
-        lines = block.split('\n')
+        lines = block.split("\n")
         if len(lines) >= 3:
-
             nid = int(lines[0])
 
             timestamp = lines[1]
-            text = '\n'.join(lines[2:])
+            text = "\n".join(lines[2:])
 
-            start_time = timestamp.split(' --> ')[0]
-            end_time = timestamp.split(' --> ')[1]
-            
-            h, m, s = start_time.replace(',', '.').split(':')
+            timestamp_parts = timestamp.split(" --> ")
+            if len(timestamp_parts) < 2:
+                continue
+            start_time = timestamp_parts[0]
+            end_time = timestamp_parts[1]
+
+            h, m, s = start_time.replace(",", ".").split(":")
             startTime_seconds = float(h) * 3600 + float(m) * 60 + float(s)
 
-            h, m, s = end_time.replace(',', '.').split(':')
+            h, m, s = end_time.replace(",", ".").split(":")
             endTime_seconds = float(h) * 3600 + float(m) * 60 + float(s)
 
-            df.append({'id': nid, 'start': startTime_seconds, 'end': endTime_seconds, 'text': text})
+            df.append(
+                {
+                    "id": nid,
+                    "start": startTime_seconds,
+                    "end": endTime_seconds,
+                    "text": text,
+                }
+            )
 
     return df
+
 
 def format_timestamp(seconds_value):
     total_milliseconds = int(round(float(seconds_value) * 1000))
@@ -68,27 +90,29 @@ def format_timestamp(seconds_value):
     seconds, milliseconds = divmod(remainder, 1000)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
-def df2srt(df, file_path):
-    with open(file_path, 'w', encoding='utf-8') as file:
-        for row in df:
 
-            nid = row['id']
+def df2srt(df, file_path):
+    with open(file_path, "w", encoding="utf-8") as file:
+        for row in df:
+            nid = row["id"]
 
             if nid == 0:
                 continue
-            
-            start_time_str = format_timestamp(row['start'])
-            end_time_str = format_timestamp(row['end'])
+
+            start_time_str = format_timestamp(row["start"])
+            end_time_str = format_timestamp(row["end"])
 
             file.write(f"{nid}\n")
             file.write(f"{start_time_str} --> {end_time_str}\n")
             file.write(f"{row['text']}\n\n")
+
 
 def remove_punctuationText(text):
     punctuation = [".", ","]
     for mark in punctuation:
         text = text.replace(mark, "")
     return text
+
 
 def apply_text_transform(text, transform):
     if transform == "Lowercase":
@@ -100,7 +124,9 @@ def apply_text_transform(text, transform):
     else:
         return text
 
+
 # ------------------------- resolve timeline functions -------------------------
+
 
 def timelineText2df(timeline, marker):
     df = []
@@ -114,22 +140,34 @@ def timelineText2df(timeline, marker):
                     nid = 1
                     for item in track:
                         if item.GetName() == "Text+":
-                            start_time = item.GetStart() / timeline.GetSetting('timelineFrameRate')
-                            end_time = item.GetEnd() / timeline.GetSetting('timelineFrameRate')
+                            start_time = item.GetStart() / timeline.GetSetting(
+                                "timelineFrameRate"
+                            )
+                            end_time = item.GetEnd() / timeline.GetSetting(
+                                "timelineFrameRate"
+                            )
                             fusion_comp = item.GetFusionCompByIndex(1)
                             if fusion_comp:
                                 text_tool = fusion_comp.FindToolByID("TextPlus")
                                 if text_tool:
                                     text_content = text_tool.GetInput("StyledText")
-                                    df.append({'id': nid, 'start': start_time, 'end': end_time, 'text': text_content})
+                                    df.append(
+                                        {
+                                            "id": nid,
+                                            "start": start_time,
+                                            "end": end_time,
+                                            "text": text_content,
+                                        }
+                                    )
                                     nid += 1
     return df
+
 
 def timelineSubtitle2df(timeline, marker):
     df = []
     if timeline:
         track_count = timeline.GetTrackCount("subtitle")
-        fps = float(timeline.GetSetting('timelineFrameRate'))
+        fps = float(timeline.GetSetting("timelineFrameRate"))
         for i in range(1, track_count + 1):
             track = timeline.GetItemListInTrack("subtitle", i)
             if track:
@@ -140,11 +178,20 @@ def timelineSubtitle2df(timeline, marker):
                         start_time = item.GetStart() / fps
                         end_time = item.GetEnd() / fps
                         text_content = item.GetName() or ""
-                        df.append({'id': nid, 'start': start_time, 'end': end_time, 'text': text_content})
+                        df.append(
+                            {
+                                "id": nid,
+                                "start": start_time,
+                                "end": end_time,
+                                "text": text_content,
+                            }
+                        )
                         nid += 1
     return df
 
+
 # ------------------------- srt file functions -------------------------
+
 
 def df2timelineText(df, timeline, marker):
     if timeline:
@@ -157,22 +204,91 @@ def df2timelineText(df, timeline, marker):
                 if track_name == marker:
                     for item in track:
                         if item.GetName() == "Text+":
-                            start_time = item.GetStart() / timeline.GetSetting('timelineFrameRate')
-                            end_time = item.GetEnd() / timeline.GetSetting('timelineFrameRate')
+                            start_time = item.GetStart() / timeline.GetSetting(
+                                "timelineFrameRate"
+                            )
+                            end_time = item.GetEnd() / timeline.GetSetting(
+                                "timelineFrameRate"
+                            )
                             fusion_comp = item.GetFusionCompByIndex(1)
                             if fusion_comp:
                                 text_tool = fusion_comp.FindToolByID("TextPlus")
                                 if text_tool:
                                     for row in df:
-                                        if row['id'] == nid:
-                                            text_tool.SetInput("StyledText", row['text'])
+                                        if row["id"] == nid:
+                                            text_tool.SetInput(
+                                                "StyledText", row["text"]
+                                            )
                                             nid += 1
                                             break
 
-def df2NewtimelineText(df, timeline, template_name, remove_punctuation=True, text_transform="Keep Case"):
+
+def append_text_plus_with_duration(
+    media_pool,
+    timeline,
+    text_clip,
+    track_index,
+    record_frame,
+    target_duration,
+    duration_multiplier,
+):
+    """
+    Append a Text+ clip and make sure it occupies exactly target_duration
+    timeline frames.
+
+    On fractional frame rates (23.976/29.97/59.94) Resolve can place the
+    clip one frame shorter than requested, leaving flickering 1-frame gaps
+    between captions, so the placed length is verified and corrected.
+    """
+    source_duration = max(1, int(target_duration * duration_multiplier + 0.999))
+    attempts = 4
+    for attempt in range(attempts):
+        new_clip = {
+            "mediaPoolItem": text_clip,
+            "startFrame": 0,
+            "endFrame": source_duration - 1,
+            "trackIndex": track_index,
+            "recordFrame": record_frame,
+        }
+        timeline_items = media_pool.AppendToTimeline([new_clip])
+        if not timeline_items or len(timeline_items) == 0:
+            return None
+        timeline_item = timeline_items[0]
+        adjustment = target_duration - int(timeline_item.GetDuration())
+        adjusted_source_duration = max(1, source_duration + adjustment)
+        if (
+            adjustment == 0
+            or adjusted_source_duration == source_duration
+            or attempt == attempts - 1
+        ):
+            return timeline_item
+        timeline.DeleteClips([timeline_item], False)
+        source_duration = adjusted_source_duration
+    return None
+
+
+def snap_caption_frame_ranges(df, fps):
+    """
+    Convert caption times to frame ranges, closing the 1-frame gaps that
+    rounding fractional frame rates can leave between consecutive captions.
+    """
+    frame_ranges = []
+    for row in df:
+        start_frame = int(round(row["start"] * fps))
+        end_frame = int(round(row["end"] * fps))
+        frame_ranges.append([start_frame, end_frame])
+    for current_range, next_range in zip(frame_ranges, frame_ranges[1:]):
+        if 0 < next_range[0] - current_range[1] <= 1:
+            current_range[1] = next_range[0]
+    return frame_ranges
+
+
+def df2NewtimelineText(
+    df, timeline, template_name, remove_punctuation=True, text_transform="Keep Case"
+):
     """
     Create new Text+ clips from SRT dataframe on timeline
-    
+
     Args:
         df: list of dicts with subtitle data
         timeline: DaVinci Resolve timeline object
@@ -184,28 +300,28 @@ def df2NewtimelineText(df, timeline, template_name, remove_punctuation=True, tex
         return False
 
     print(f"Creating Text+ clips from SRT file: {df} using template: {template_name}")
-    
+
     media_pool = project.GetMediaPool()
     root_folder = media_pool.GetRootFolder()
-    
-    text_clip = find_text_plus_template_by_name(media_pool, template_name)    
+
+    text_clip = find_text_plus_template_by_name(media_pool, template_name)
     if not text_clip:
         print(f"Text+ template '{template_name}' not found in Media Pool.")
         print("Available templates:")
         list_available_templates(media_pool)
         return False
-    
+
     print(f"Found Text+ template: {text_clip.GetClipProperty('Clip Name')}")
-    
+
     track_added = timeline.AddTrack("video")
     if not track_added:
         print("Failed to add new video track")
         return False
-    
+
     track_count = timeline.GetTrackCount("video")
-    
-    fps = float(timeline.GetSetting('timelineFrameRate'))
-    
+
+    fps = float(timeline.GetSetting("timelineFrameRate"))
+
     duration_multiplier = 1.0
     try:
         test_duration = 100
@@ -214,47 +330,42 @@ def df2NewtimelineText(df, timeline, template_name, remove_punctuation=True, tex
             "startFrame": 0,
             "endFrame": test_duration - 1,
             "trackIndex": track_count,
-            "recordFrame": 0
+            "recordFrame": 0,
         }
-        
+
         test_items = media_pool.AppendToTimeline([test_clip])
         if test_items and len(test_items) > 0:
             test_item = test_items[0]
             test_duration_real = test_item.GetDuration()
             timeline.DeleteClips([test_item], False)
-            duration_multiplier = test_duration / test_duration_real if test_duration_real > 0 else 1.0
-        
+            duration_multiplier = (
+                test_duration / test_duration_real if test_duration_real > 0 else 1.0
+            )
+
         print(f"Duration multiplier: {duration_multiplier:.3f}")
     except Exception as e:
         print(f"Warning: Could not calculate duration multiplier, using 1.0: {e}")
         duration_multiplier = 1.0
-    
+
     created_clips = []
-    
-    for row in df:
-        if row['id'] == 0:
-            continue
-            
-        start_frame = int(row['start'] * fps)
-        end_frame = int(row['end'] * fps)
-        duration = end_frame - start_frame
-        
-        new_clip = {
-            "mediaPoolItem": text_clip,
-            "startFrame": 0,
-            "endFrame": duration - 1,
-            "trackIndex": track_count,
-            "recordFrame": start_frame
-        }
-        
-        base_duration = new_clip["endFrame"] - new_clip["startFrame"] + 1
-        new_duration = int(base_duration * duration_multiplier + 0.999)
-        new_clip["endFrame"] = new_duration - 1
-        timeline_items = media_pool.AppendToTimeline([new_clip])
-        
-        if timeline_items and len(timeline_items) > 0:
-            timeline_item = timeline_items[0]
-            
+
+    rows = [row for row in df if row["id"] != 0]
+    frame_ranges = snap_caption_frame_ranges(rows, fps)
+
+    for row, (start_frame, end_frame) in zip(rows, frame_ranges):
+        duration = max(1, end_frame - start_frame)
+
+        timeline_item = append_text_plus_with_duration(
+            media_pool,
+            timeline,
+            text_clip,
+            track_count,
+            start_frame,
+            duration,
+            duration_multiplier,
+        )
+
+        if timeline_item:
             timeline_item.SetClipColor("Green")
 
             if timeline_item.GetFusionCompCount() > 0:
@@ -262,74 +373,77 @@ def df2NewtimelineText(df, timeline, template_name, remove_punctuation=True, tex
                 if comp:
                     text_tool = comp.FindToolByID("TextPlus")
                     if text_tool:
-                        text_content = remove_punctuationText(row['text']) if remove_punctuation else row['text']
-                        text_content = apply_text_transform(text_content, text_transform)
+                        text_content = (
+                            remove_punctuationText(row["text"])
+                            if remove_punctuation
+                            else row["text"]
+                        )
+                        text_content = apply_text_transform(
+                            text_content, text_transform
+                        )
                         text_tool.SetInput("StyledText", text_content)
                         created_clips.append(timeline_item)
-                        print(f"Created subtitle {row['id']}: {row['text'][:50]}{'...' if len(row['text']) > 50 else ''}")
+                        print(
+                            f"Created subtitle {row['id']}: {row['text'][:50]}{'...' if len(row['text']) > 50 else ''}"
+                        )
                     else:
-                        print(f"Warning: No TextPlus tool found in template for subtitle {row['id']}")
+                        print(
+                            f"Warning: No TextPlus tool found in template for subtitle {row['id']}"
+                        )
             else:
                 print(f"Warning: No Fusion composition found for subtitle {row['id']}")
         else:
             print(f"Error: Failed to create timeline item for subtitle {row['id']}")
 
-    
     print(f"Created {len(created_clips)} Text+ clips")
     return True
 
+
 def find_text_plus_template_by_name(media_pool, template_name):
     """
-    Find a specific Text+ template by name in the media pool
-    Searches all folders for a matching template name
+    Find a specific Text+ template by name in the templates folder
     """
-    root_folder = media_pool.GetRootFolder()
-    
-    def search_folder(folder):
-        clips = folder.GetClipList()
-        for clip in clips:
-            if clip.GetClipProperty("File Path") == "":
-                clip_name = clip.GetClipProperty("Clip Name")
-                if clip_name == template_name:
-                    return clip
-        
-        for subfolder in folder.GetSubFolderList():
-            result = search_folder(subfolder)
-            if result:
-                return result
+    templates_folder = find_templates_folder(media_pool)
+    if not templates_folder:
         return None
-    
-    return search_folder(root_folder)
+
+    for clip in templates_folder.GetClipList():
+        if (
+            is_text_plus_template(clip)
+            and clip.GetClipProperty("Clip Name") == template_name
+        ):
+            return clip
+    return None
+
 
 def list_available_templates(media_pool):
     """
-    List all available Text+ templates (Fusion compositions) in the media pool
+    List all available Text+ templates (Fusion compositions) in the templates folder
     """
-    root_folder = media_pool.GetRootFolder()
+    templates_folder = find_templates_folder(media_pool)
+    if not templates_folder:
+        print(f"  No {TEMPLATES_FOLDER_NAME} folder found in Media Pool")
+        return
     templates = []
-    
-    def search_folder(folder, folder_path=""):
-        clips = folder.GetClipList()
-        for clip in clips:
-            if clip.GetClipProperty("File Path") == "":
-                clip_name = clip.GetClipProperty("Clip Name")
-                templates.append(f"  - {clip_name} (in {folder_path or 'Root'})")
-        
-        for subfolder in folder.GetSubFolderList():
-            subfolder_name = subfolder.GetName()
-            new_path = f"{folder_path}/{subfolder_name}" if folder_path else subfolder_name
-            search_folder(subfolder, new_path)
-    
-    search_folder(root_folder)
-    
+
+    for clip in templates_folder.GetClipList():
+        if is_text_plus_template(clip):
+            clip_name = clip.GetClipProperty("Clip Name")
+            templates.append(f"  - {clip_name} (in {TEMPLATES_FOLDER_NAME})")
+
     if templates:
         for template in templates:
             print(template)
     else:
-        print("  No Text+ templates (Fusion compositions) found in Media Pool")
-        print("  Create a Text+ composition in Fusion and save it to the Media Pool")
+        print(
+            f"  No Text+ templates (Fusion compositions) found in {TEMPLATES_FOLDER_NAME}"
+        )
+        print(
+            f"  Create a Text+ composition in Fusion and save it to the {TEMPLATES_FOLDER_NAME} folder"
+        )
 
     # ------------------------------------------------------------
+
 
 def get_video_tracks():
     global timeline
@@ -339,6 +453,7 @@ def get_video_tracks():
     track_count = timeline.GetTrackCount("video")
     return [timeline.GetTrackName("video", i) for i in range(1, track_count + 1)]
 
+
 def get_subtitle_tracks():
     global timeline
     timeline = project.GetCurrentTimeline()
@@ -347,23 +462,39 @@ def get_subtitle_tracks():
     track_count = timeline.GetTrackCount("subtitle")
     return [timeline.GetTrackName("subtitle", i) for i in range(1, track_count + 1)]
 
+
+def find_templates_folder(media_pool):
+    root_folder = media_pool.GetRootFolder()
+
+    def search_folder(folder):
+        if folder.GetName() == TEMPLATES_FOLDER_NAME:
+            return folder
+        for subfolder in folder.GetSubFolderList():
+            result = search_folder(subfolder)
+            if result:
+                return result
+        return None
+
+    return search_folder(root_folder)
+
+
+def is_text_plus_template(clip):
+    return clip.GetClipProperty("File Path") == ""
+
+
 def get_available_templates():
-    """Get list of available Text+ templates from Media Pool"""
+    """Get list of available Text+ templates from the templates folder"""
     try:
         media_pool = project.GetMediaPool()
-        root_folder = media_pool.GetRootFolder()
+        templates_folder = find_templates_folder(media_pool)
+        if not templates_folder:
+            return []
         templates = []
-        
-        def search_folder(folder):
-            for subfolder in folder.GetSubFolderList():
-                if subfolder.GetName() == "Captions Templates":
-                    clips = subfolder.GetClipList()
-                    for clip in clips:
-                        if clip.GetClipProperty("File Path") == "":
-                            clip_name = clip.GetClipProperty("Clip Name")
-                            templates.append(clip_name)
-        
-        search_folder(root_folder)
+        for clip in templates_folder.GetClipList():
+            if is_text_plus_template(clip):
+                clip_name = clip.GetClipProperty("Clip Name")
+                if clip_name and clip_name not in templates:
+                    templates.append(clip_name)
 
         templates.sort()
 
@@ -372,16 +503,23 @@ def get_available_templates():
         print(f"Error getting templates: {e}")
         return []
 
+
 def main():
     root = tk.Tk()
     root.focus_force()
-    root.title("OpenCaptions " + version)
+    base_window_title = "OpenCaptions " + version
+    root.title(base_window_title)
     root.geometry("720x540")
     root.minsize(720, 620)
 
     status_var = tk.StringVar()
     remove_punctuation_var = tk.BooleanVar(value=True)
-    text_transform_options = ["Keep Case", "Lowercase", "Uppercase", "Capitalize All Words"]
+    text_transform_options = [
+        "Keep Case",
+        "Lowercase",
+        "Uppercase",
+        "Capitalize All Words",
+    ]
     text_transform_var = tk.StringVar(value=text_transform_options[0])
     subtotext_remove_punctuation_var = tk.BooleanVar(value=True)
     subtotext_text_transform_var = tk.StringVar(value=text_transform_options[0])
@@ -402,6 +540,31 @@ def main():
     subtotext_template_var = tk.StringVar(value=templates[0] if templates else "")
     subtotext_combo = None
     subtotext_template_combo = None
+    notebook_ref = {"widget": None}
+
+    def format_window_title(template_names=None):
+        template_names = [name for name in (template_names or []) if name]
+        if not template_names:
+            return base_window_title
+        unique_template_names = list(dict.fromkeys(template_names))
+        return f"{base_window_title} - {', '.join(unique_template_names)}"
+
+    def update_window_title(*_):
+        active_templates = []
+        notebook = notebook_ref["widget"]
+        if notebook is not None and notebook.select():
+            active_tab = notebook.tab(notebook.select(), "text")
+            if active_tab == "Sub to Text+":
+                active_templates = [subtotext_template_var.get()]
+            elif active_tab == "Create Text+":
+                active_templates = [
+                    entry["template_var"].get() for entry in track_entries
+                ]
+        else:
+            active_templates = [entry["template_var"].get() for entry in track_entries]
+        root.title(format_window_title(active_templates))
+
+    subtotext_template_var.trace_add("write", update_window_title)
 
     def prompt_for_path(dialog_func, **kwargs):
         try:
@@ -448,7 +611,13 @@ def main():
         nonlocal add_button
         if entry not in track_entries:
             return
-        for widget in (entry["label"], entry["template_combo"], entry["srt_entry"], entry["select_button"], entry["delete_button"]):
+        for widget in (
+            entry["label"],
+            entry["template_combo"],
+            entry["srt_entry"],
+            entry["select_button"],
+            entry["delete_button"],
+        ):
             widget.destroy()
         track_entries.remove(entry)
         for index, entry_item in enumerate(track_entries):
@@ -460,6 +629,7 @@ def main():
             entry_item["delete_button"].grid_configure(row=index + 1)
         if add_button is not None:
             add_button.state(["!disabled"])
+        update_window_title()
         status_var.set("Removed track.")
 
     def add_track_entry():
@@ -476,19 +646,30 @@ def main():
             "template_var": template_var,
             "srt_var": srt_var,
         }
+        template_var.trace_add("write", update_window_title)
         label = ttk.Label(tracks_frame, text=f"Track {index + 1}")
         label.grid(row=index + 1, column=0, sticky="w", pady=(4, 0))
         entry["label"] = label
-        template_combo = ttk.Combobox(tracks_frame, textvariable=template_var, values=templates, state="readonly")
+        template_combo = ttk.Combobox(
+            tracks_frame, textvariable=template_var, values=templates, state="readonly"
+        )
         template_combo.grid(row=index + 1, column=1, sticky="ew", pady=(4, 0))
         entry["template_combo"] = template_combo
         srt_entry = ttk.Entry(tracks_frame, textvariable=srt_var)
         srt_entry.grid(row=index + 1, column=2, sticky="ew", pady=(4, 0))
         entry["srt_entry"] = srt_entry
-        select_button = ttk.Button(tracks_frame, text="Select", command=lambda e=entry: select_srt_file(e))
+        select_button = ttk.Button(
+            tracks_frame, text="Select", command=lambda e=entry: select_srt_file(e)
+        )
         select_button.grid(row=index + 1, column=3, sticky="w", pady=(4, 0))
         entry["select_button"] = select_button
-        delete_button = ttk.Button(tracks_frame, text="X", width=1, style="Delete.TButton", command=lambda e=entry: remove_track_entry(e))
+        delete_button = ttk.Button(
+            tracks_frame,
+            text="X",
+            width=1,
+            style="Delete.TButton",
+            command=lambda e=entry: remove_track_entry(e),
+        )
         delete_button.grid(row=index + 1, column=4, sticky="w", pady=(4, 0))
         entry["delete_button"] = delete_button
         track_entries.append(entry)
@@ -655,7 +836,9 @@ def main():
     content.rowconfigure(0, weight=1)
 
     notebook = ttk.Notebook(content)
+    notebook_ref["widget"] = notebook
     notebook.grid(row=0, column=0, sticky="nsew")
+    notebook.bind("<<NotebookTabChanged>>", update_window_title)
 
     create_tab = ttk.Frame(notebook)
     create_tab.columnconfigure(0, weight=1)
@@ -691,9 +874,15 @@ def main():
     tracks_frame.columnconfigure(2, weight=1)
 
     ttk.Label(tracks_frame, text="Track").grid(row=0, column=0, sticky="w", padx=(0, 8))
-    ttk.Label(tracks_frame, text="Template").grid(row=0, column=1, sticky="w", padx=(0, 8))
-    ttk.Label(tracks_frame, text="SRT File").grid(row=0, column=2, sticky="w", padx=(0, 8))
-    ttk.Label(tracks_frame, text="Load File").grid(row=0, column=3, sticky="w", padx=(0, 8))
+    ttk.Label(tracks_frame, text="Template").grid(
+        row=0, column=1, sticky="w", padx=(0, 8)
+    )
+    ttk.Label(tracks_frame, text="SRT File").grid(
+        row=0, column=2, sticky="w", padx=(0, 8)
+    )
+    ttk.Label(tracks_frame, text="Load File").grid(
+        row=0, column=3, sticky="w", padx=(0, 8)
+    )
     ttk.Label(tracks_frame, text="Remove").grid(row=0, column=4, sticky="w")
 
     controls_frame = ttk.Frame(tracks_section)
@@ -704,55 +893,97 @@ def main():
 
     add_button = ttk.Button(controls_frame, text="Add Track", command=add_track_entry)
     add_button.grid(row=0, column=0, sticky="sw")
-    ttk.Button(controls_frame, text="Refresh Templates", command=refresh_templates).grid(row=0, column=1, sticky="sw", padx=(12, 0))
+    ttk.Button(
+        controls_frame, text="Refresh Templates", command=refresh_templates
+    ).grid(row=0, column=1, sticky="sw", padx=(12, 0))
 
     options_section = ttk.LabelFrame(create_tab, text="Options", padding=(16, 12))
     options_section.grid(row=1, column=0, sticky="ew")
     options_section.columnconfigure(1, weight=1)
 
     ttk.Label(options_section, text="Case").grid(row=0, column=0, sticky="w")
-    ttk.Combobox(options_section, textvariable=text_transform_var, values=text_transform_options, state="readonly").grid(row=0, column=1, sticky="ew")
-    ttk.Label(options_section, text="Remove punctuation").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    ttk.Checkbutton(options_section, variable=remove_punctuation_var, onvalue=True, offvalue=False).grid(row=1, column=1, sticky="w", pady=(12, 0))
+    ttk.Combobox(
+        options_section,
+        textvariable=text_transform_var,
+        values=text_transform_options,
+        state="readonly",
+    ).grid(row=0, column=1, sticky="ew")
+    ttk.Label(options_section, text="Remove punctuation").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    ttk.Checkbutton(
+        options_section, variable=remove_punctuation_var, onvalue=True, offvalue=False
+    ).grid(row=1, column=1, sticky="w", pady=(12, 0))
 
     actions_frame = ttk.Frame(create_tab)
     actions_frame.grid(row=2, column=0, sticky="ew", pady=(16, 0))
-    ttk.Button(actions_frame, text="Execute", command=execute_callback).grid(row=0, column=0, sticky="ew")
+    ttk.Button(actions_frame, text="Execute", command=execute_callback).grid(
+        row=0, column=0, sticky="ew"
+    )
     actions_frame.columnconfigure(0, weight=1)
 
     subtotext_section = ttk.LabelFrame(subtotext_tab, text="Convert", padding=(16, 12))
     subtotext_section.grid(row=0, column=0, sticky="nsew")
     subtotext_section.columnconfigure(1, weight=1)
 
-    ttk.Label(subtotext_section, text="Subtitle Track").grid(row=0, column=0, sticky="w")
-    subtotext_combo = ttk.Combobox(subtotext_section, textvariable=subtotext_track_var, state="readonly")
+    ttk.Label(subtotext_section, text="Subtitle Track").grid(
+        row=0, column=0, sticky="w"
+    )
+    subtotext_combo = ttk.Combobox(
+        subtotext_section, textvariable=subtotext_track_var, state="readonly"
+    )
     subtotext_combo.grid(row=0, column=1, sticky="ew")
-    ttk.Button(subtotext_section, text="Refresh Tracks", command=refresh_exportsub_tracks).grid(row=0, column=2, sticky="w", padx=(12, 0))
+    ttk.Button(
+        subtotext_section, text="Refresh Tracks", command=refresh_exportsub_tracks
+    ).grid(row=0, column=2, sticky="w", padx=(12, 0))
 
-    ttk.Label(subtotext_section, text="Template").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    subtotext_template_combo = ttk.Combobox(subtotext_section, textvariable=subtotext_template_var, values=templates, state="readonly")
+    ttk.Label(subtotext_section, text="Template").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    subtotext_template_combo = ttk.Combobox(
+        subtotext_section,
+        textvariable=subtotext_template_var,
+        values=templates,
+        state="readonly",
+    )
     subtotext_template_combo.grid(row=1, column=1, sticky="ew", pady=(12, 0))
-    ttk.Button(subtotext_section, text="Refresh Templates", command=refresh_templates).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
+    ttk.Button(
+        subtotext_section, text="Refresh Templates", command=refresh_templates
+    ).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
 
     subtotext_options = ttk.LabelFrame(subtotext_tab, text="Options", padding=(16, 12))
     subtotext_options.grid(row=1, column=0, sticky="ew", pady=(12, 0))
     subtotext_options.columnconfigure(1, weight=1)
 
     ttk.Label(subtotext_options, text="Case").grid(row=0, column=0, sticky="w")
-    ttk.Combobox(subtotext_options, textvariable=subtotext_text_transform_var, values=text_transform_options, state="readonly").grid(row=0, column=1, sticky="ew")
-    ttk.Label(subtotext_options, text="Remove punctuation").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    ttk.Checkbutton(subtotext_options, variable=subtotext_remove_punctuation_var, onvalue=True, offvalue=False).grid(row=1, column=1, sticky="w", pady=(12, 0))
+    ttk.Combobox(
+        subtotext_options,
+        textvariable=subtotext_text_transform_var,
+        values=text_transform_options,
+        state="readonly",
+    ).grid(row=0, column=1, sticky="ew")
+    ttk.Label(subtotext_options, text="Remove punctuation").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    ttk.Checkbutton(
+        subtotext_options,
+        variable=subtotext_remove_punctuation_var,
+        onvalue=True,
+        offvalue=False,
+    ).grid(row=1, column=1, sticky="w", pady=(12, 0))
 
     subtotext_actions = ttk.Frame(subtotext_tab)
     subtotext_actions.grid(row=2, column=0, sticky="ew", pady=(16, 0))
-    ttk.Button(subtotext_actions, text="Convert", command=subtotext_callback).grid(row=0, column=0, sticky="ew")
+    ttk.Button(subtotext_actions, text="Convert", command=subtotext_callback).grid(
+        row=0, column=0, sticky="ew"
+    )
     subtotext_actions.columnconfigure(0, weight=1)
 
     ttk.Label(
         subtotext_tab,
         text="This feature relies on a bug in the DaVinci Resolve API. If that bug gets fixed, all plugins that convert sub tracks to Text+ will break. Using a srt file is more reliable.",
         wraplength=480,
-        foreground="orange"
+        foreground="orange",
     ).grid(row=3, column=0, sticky="w", pady=(12, 0))
 
     export_section = ttk.LabelFrame(export_tab, text="Export", padding=(16, 12))
@@ -760,36 +991,62 @@ def main():
     export_section.columnconfigure(1, weight=1)
 
     ttk.Label(export_section, text="Text+ Track").grid(row=0, column=0, sticky="w")
-    export_combo = ttk.Combobox(export_section, textvariable=export_track_var, state="readonly")
+    export_combo = ttk.Combobox(
+        export_section, textvariable=export_track_var, state="readonly"
+    )
     export_combo.grid(row=0, column=1, sticky="ew")
-    ttk.Button(export_section, text="Refresh Tracks", command=refresh_export_tracks).grid(row=0, column=2, sticky="w", padx=(12, 0))
+    ttk.Button(
+        export_section, text="Refresh Tracks", command=refresh_export_tracks
+    ).grid(row=0, column=2, sticky="w", padx=(12, 0))
 
-    ttk.Label(export_section, text="SRT File").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    ttk.Entry(export_section, textvariable=export_path_var).grid(row=1, column=1, sticky="ew", pady=(12, 0))
-    ttk.Button(export_section, text="Select", command=select_export_file).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
+    ttk.Label(export_section, text="SRT File").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    ttk.Entry(export_section, textvariable=export_path_var).grid(
+        row=1, column=1, sticky="ew", pady=(12, 0)
+    )
+    ttk.Button(export_section, text="Select", command=select_export_file).grid(
+        row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0)
+    )
 
-    ttk.Button(export_section, text="Export", command=export_callback).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(24, 0))
+    ttk.Button(export_section, text="Export", command=export_callback).grid(
+        row=2, column=0, columnspan=3, sticky="ew", pady=(24, 0)
+    )
 
     exportsub_section = ttk.LabelFrame(exportsub_tab, text="Export", padding=(16, 12))
     exportsub_section.grid(row=0, column=0, sticky="nsew")
     exportsub_section.columnconfigure(1, weight=1)
 
-    ttk.Label(exportsub_section, text="Subtitle Track").grid(row=0, column=0, sticky="w")
-    exportsub_combo = ttk.Combobox(exportsub_section, textvariable=exportsub_track_var, state="readonly")
+    ttk.Label(exportsub_section, text="Subtitle Track").grid(
+        row=0, column=0, sticky="w"
+    )
+    exportsub_combo = ttk.Combobox(
+        exportsub_section, textvariable=exportsub_track_var, state="readonly"
+    )
     exportsub_combo.grid(row=0, column=1, sticky="ew")
-    ttk.Button(exportsub_section, text="Refresh Tracks", command=refresh_exportsub_tracks).grid(row=0, column=2, sticky="w", padx=(12, 0))
+    ttk.Button(
+        exportsub_section, text="Refresh Tracks", command=refresh_exportsub_tracks
+    ).grid(row=0, column=2, sticky="w", padx=(12, 0))
 
-    ttk.Label(exportsub_section, text="SRT File").grid(row=1, column=0, sticky="w", pady=(12, 0))
-    ttk.Entry(exportsub_section, textvariable=exportsub_path_var).grid(row=1, column=1, sticky="ew", pady=(12, 0))
-    ttk.Button(exportsub_section, text="Select", command=select_exportsub_file).grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0))
+    ttk.Label(exportsub_section, text="SRT File").grid(
+        row=1, column=0, sticky="w", pady=(12, 0)
+    )
+    ttk.Entry(exportsub_section, textvariable=exportsub_path_var).grid(
+        row=1, column=1, sticky="ew", pady=(12, 0)
+    )
+    ttk.Button(exportsub_section, text="Select", command=select_exportsub_file).grid(
+        row=1, column=2, sticky="w", padx=(12, 0), pady=(12, 0)
+    )
 
-    ttk.Button(exportsub_section, text="Export", command=export_sub_callback).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(24, 0))
+    ttk.Button(exportsub_section, text="Export", command=export_sub_callback).grid(
+        row=2, column=0, columnspan=3, sticky="ew", pady=(24, 0)
+    )
 
     ttk.Label(
         exportsub_section,
         text="This feature relies on a bug in the DaVinci Resolve API. If that bug gets fixed, all plugins that convert sub tracks to Text+ will break. Using a srt file is more reliable.",
         wraplength=480,
-        foreground="orange"
+        foreground="orange",
     ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(12, 0))
 
     status_frame = ttk.Frame(content)
@@ -801,8 +1058,10 @@ def main():
     refresh_templates()
     refresh_export_tracks()
     refresh_exportsub_tracks()
+    update_window_title()
 
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

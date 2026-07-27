@@ -47,6 +47,7 @@ OpenCaptions Studio is a GUI to help convert a subtitle track to a Text+ track u
 The best options if you use Davinci Resolve Studio `subtitle from audio` feature that generate badly timed subtitle tracks.
 
 Demo video:
+
 [![OpenCaptions Studio](https://img.youtube.com/vi/lQh17YKiljU/0.jpg)](https://www.youtube.com/watch?v=lQh17YKiljU)
 
 
